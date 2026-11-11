@@ -33,3 +33,12 @@ google-services.json
 
 # Android Profiling
 *.hprof
+
+# Tabless
+node_modules/
+dist/
+.env
+.env.*
+!.env.example
+*service-account*.json
+*credentials*.json

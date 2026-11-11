@@ -1,0 +1,9 @@
+{
+  "manifest_version": 3,
+  "name": "Tabless",
+  "version": "0.1.0",
+  "description": "A New Tab page that does the browsing for you and answers with cards.",
+  "chrome_url_overrides": { "newtab": "newtab.html" },
+  "permissions": ["tabs", "tabGroups", "scripting", "storage"],
+  "host_permissions": ["<all_urls>"]
+}
