@@ -19,6 +19,29 @@ type Turn = { id: number; prompt: string; cards: Card[] };
 type LogEntry = { id: number; label: string; status: LogStatus };
 type Panel = 'activity' | 'sources' | null;
 
+function extensionStorage(): chrome.storage.LocalStorageArea | undefined {
+  return typeof chrome === 'undefined' ? undefined : chrome.storage?.local;
+}
+
+async function readSettings(): Promise<{ backendUrl?: string; themePreference?: string }> {
+  const storage = extensionStorage();
+  if (storage) return storage.get(['backendUrl', 'themePreference']);
+  return {
+    backendUrl: localStorage.getItem('tabless.backendUrl') ?? undefined,
+    themePreference: localStorage.getItem('tabless.themePreference') ?? undefined,
+  };
+}
+
+function saveSettings(values: { backendUrl?: string; themePreference?: ThemePreference }): void {
+  const storage = extensionStorage();
+  if (storage) {
+    void storage.set(values);
+    return;
+  }
+  if (values.backendUrl !== undefined) localStorage.setItem('tabless.backendUrl', values.backendUrl);
+  if (values.themePreference !== undefined) localStorage.setItem('tabless.themePreference', values.themePreference);
+}
+
 const STATUS_ICON: Record<LogStatus, { glyph: string; name: string }> = {
   running: { glyph: '', name: 'Running' },
   done: { glyph: '✓', name: 'Done' },
@@ -62,13 +85,14 @@ export default function App() {
   const recognition = useRef<any>(null);
 
   useEffect(() => {
-    chrome.storage.local.get(['backendUrl', 'themePreference']).then((saved) => {
+    void readSettings().then((saved) => {
       if (typeof saved.backendUrl === 'string' && saved.backendUrl) setBackendUrl(saved.backendUrl);
       if (saved.themePreference === 'system' || saved.themePreference === 'light' || saved.themePreference === 'dark') {
         setTheme(saved.themePreference);
       }
       setThemeReady(true);
     });
+    if (typeof chrome === 'undefined' || !chrome.storage?.onChanged) return;
     const onStorageChanged = (changes: { [key: string]: chrome.storage.StorageChange }) => {
       const value = changes.themePreference?.newValue;
       if (value === 'system' || value === 'light' || value === 'dark') setTheme(value);
@@ -79,7 +103,7 @@ export default function App() {
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
-    if (themeReady) void chrome.storage.local.set({ themePreference: theme });
+    if (themeReady) saveSettings({ themePreference: theme });
   }, [theme, themeReady]);
 
   useEffect(() => {
@@ -171,7 +195,7 @@ export default function App() {
 
   function updateTheme(value: ThemePreference) {
     setTheme(value);
-    void chrome.storage.local.set({ themePreference: value });
+    saveSettings({ themePreference: value });
   }
 
   const current = log.at(-1);
@@ -356,7 +380,7 @@ export default function App() {
               value={backendUrl}
               onChange={(event) => {
                 setBackendUrl(event.target.value);
-                void chrome.storage.local.set({ backendUrl: event.target.value });
+                saveSettings({ backendUrl: event.target.value });
               }}
               className="backend-input"
             />
