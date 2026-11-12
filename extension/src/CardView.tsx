@@ -2,45 +2,38 @@ import { useEffect, useState } from 'react';
 import { errorMessage } from './agent';
 import { isHttpUrl, type Action, type ApprovalCard as ApprovalCardData, type Card } from './cards';
 import { approve, dismiss } from './tools';
-import { Button, Card as SurfaceCard, Icon, StatusPill } from './components/ui';
 
-function sourceHostname(url: string): string {
-  try {
-    return new URL(url).hostname.replace(/^www\./, '');
-  } catch {
-    return url;
-  }
+const shell = 'animate-fade-in rounded-2xl border border-white/10 bg-white/[0.04] p-5';
+const linkClass = 'text-violet-300 underline underline-offset-2 hover:text-violet-200';
+
+function sourceLabel(url: string): string {
+  const u = new URL(url);
+  const path = u.pathname === '/' ? '' : u.pathname;
+  return (u.hostname.replace(/^www\./, '') + path).slice(0, 48);
 }
 
 function Sources({ urls }: { urls: string[] }) {
   if (!urls.length) return null;
   return (
-    <nav className="source-list" aria-label="Sources">
-      {urls.map((url) => (
-        <a key={url} href={url} target="_blank" rel="noreferrer" className="source-link">
-          {sourceHostname(url)}
+    <p className="mt-4 flex flex-wrap gap-x-3 gap-y-1 text-xs text-zinc-400">
+      <span>Sources:</span>
+      {urls.map((u) => (
+        <a key={u} href={u} target="_blank" rel="noreferrer" className={linkClass}>
+          {sourceLabel(u)}
         </a>
       ))}
-    </nav>
+    </p>
   );
 }
 
-function CardHeader({ icon, title, status }: { icon: 'mail' | 'calendar' | 'table' | 'shield' | 'error' | 'sparkle'; title: string; status?: string }) {
-  return (
-    <header className="card-header">
-      <span className="card-icon"><Icon name={icon} /></span>
-      <h3 className="card-heading">{title}</h3>
-      {status && <span className="source-status">{status}</span>}
-    </header>
-  );
-}
+const buttonClass = 'rounded-lg border border-white/15 px-3 py-1.5 text-sm text-zinc-100 hover:bg-white/10 disabled:opacity-40';
 
-function EmailCard({ card, onReply }: { card: Extract<Card, { type: 'email' }>; onReply?(): void }) {
+function EmailCard({ card }: { card: Extract<Card, { type: 'email' }> }) {
   const [speaking, setSpeaking] = useState(false);
   useEffect(() => () => speechSynthesis.cancel(), []);
 
   function toggleSpeech() {
-    speechSynthesis.cancel();
+    speechSynthesis.cancel(); // stops this card, or any other card that is reading
     if (speaking) return;
     const intro = card.complete ? 'Email' : 'Preview of an email';
     const utterance = new SpeechSynthesisUtterance(`${intro} from ${card.sender}. Subject: ${card.subject}. ${card.body || card.summary}`);
@@ -50,71 +43,98 @@ function EmailCard({ card, onReply }: { card: Extract<Card, { type: 'email' }>; 
   }
 
   return (
-    <SurfaceCard>
-      <CardHeader icon="mail" title={card.subject || '(no subject)'} status={card.complete ? 'Full message' : 'Preview only'} />
-      <div className="flex items-center gap-3">
-        <span className="email-avatar" aria-hidden="true">{card.sender.trim().charAt(0).toUpperCase() || '?'}</span>
-        <div className="min-w-0">
-          <p className="m-0 text-sm">{card.sender}{card.senderEmail ? <span className="card-muted"> &lt;{card.senderEmail}&gt;</span> : null}</p>
-          <p className="m-0 text-xs card-muted">{card.time}</p>
-        </div>
-      </div>
+    <article className={shell}>
+      <header className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+        <p className="text-sm text-zinc-300">
+          <span className="font-semibold text-zinc-100">{card.sender}</span>
+          {card.senderEmail && <span className="text-zinc-400"> &lt;{card.senderEmail}&gt;</span>}
+        </p>
+        <p className="text-xs text-zinc-400">{card.time}</p>
+      </header>
+      <h3 className="mt-1 flex flex-wrap items-center gap-2 text-lg font-semibold">
+        {card.subject || '(no subject)'}
+        {!card.complete && (
+          <span className="rounded-full border border-amber-300/40 px-2 py-0.5 text-xs font-medium text-amber-200">Preview</span>
+        )}
+      </h3>
       {card.warnings.map((warning) => (
-        <p key={warning} className="warning-box"><span aria-hidden="true">⚠ </span>{warning}</p>
+        <p key={warning} className="mt-2 rounded-lg border border-amber-300/30 bg-amber-300/10 px-3 py-2 text-sm text-amber-100">
+          <span aria-hidden="true">⚠ </span>
+          {warning}
+        </p>
       ))}
-      {card.summary && <div className="inset"><p className="inset-label">Summary</p><p className="m-0 card-text">{card.summary}</p></div>}
+      {card.summary && <p className="mt-3 leading-relaxed text-zinc-200">{card.summary}</p>}
       {card.body && (
-        <div tabIndex={0} role="group" aria-label={card.complete ? 'Email body' : 'Email preview'} className="inset max-h-64 overflow-y-auto whitespace-pre-wrap">
-          <p className="inset-label">{card.complete ? 'Message' : 'Preview'}</p>
-          <p className="m-0 card-text">{card.body}</p>
+        <div
+          tabIndex={0}
+          role="group"
+          aria-label={card.complete ? 'Email body' : 'Email preview'}
+          className="mt-3 max-h-64 overflow-y-auto whitespace-pre-wrap rounded-xl border border-white/10 bg-black/30 p-3 text-sm leading-relaxed text-zinc-300"
+        >
+          {card.body}
         </div>
       )}
-      {!card.complete && <p className="mt-3 mb-0 text-sm card-muted">Only the available preview was read.</p>}
+      {!card.complete && <p className="mt-2 text-xs text-zinc-400">Preview only. The full message was not read.</p>}
       <div className="mt-4 flex flex-wrap gap-2">
-        <Button type="button" variant="tonal" onClick={toggleSpeech} aria-pressed={speaking}>{speaking ? 'Stop reading' : 'Read aloud'}</Button>
-        {card.url && <a className="ui-button ui-button-outlined" href={card.url} target="_blank" rel="noreferrer">Open original</a>}
-        {onReply && <Button type="button" onClick={onReply}>Reply</Button>}
+        <button type="button" onClick={toggleSpeech} aria-pressed={speaking} className={buttonClass}>
+          {speaking ? 'Stop reading' : 'Read aloud'}
+        </button>
+        {card.url && (
+          <a href={card.url} target="_blank" rel="noreferrer" className={buttonClass}>
+            Open original
+          </a>
+        )}
       </div>
-    </SurfaceCard>
+    </article>
   );
 }
 
 function CalendarCard({ card }: { card: Extract<Card, { type: 'calendar' }> }) {
   const [year, month, day] = card.date.split('-').map(Number);
   const title = new Date(year, month - 1, day).toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' });
-  const calendarUrl = `https://calendar.google.com/calendar/r/day/${year}/${month}/${day}`;
   return (
-    <SurfaceCard>
-      <CardHeader icon="calendar" title={title} status="Not verified" />
-      <p className="warning-box mt-0">Availability could not be fully verified from events visible in your calendar.</p>
+    <article className={shell}>
+      <h3 className="text-lg font-semibold">{title}</h3>
       {card.events.length ? (
-        <ul className="mt-3 divide-y divide-[var(--outline)]/30">
-          {card.events.map((event, index) => (
-            <li key={`${event.time}-${index}`} className="flex flex-wrap gap-x-5 gap-y-1 py-3 text-sm">
-              <span className="w-36 shrink-0 card-muted">{event.time || 'All day'}</span>
-              <span>{event.title}</span>
+        <ul className="mt-3 divide-y divide-white/10">
+          {card.events.map((event, i) => (
+            <li key={i} className="flex gap-4 py-2 text-sm">
+              <span className="w-36 shrink-0 text-zinc-400">{event.time || 'All day'}</span>
+              <span className="text-zinc-100">{event.title}</span>
             </li>
           ))}
         </ul>
-      ) : <p className="mt-3 card-text">No events visible on this day.</p>}
-      {card.suggestedSlot && <p className="inset"><span className="inset-label">Suggested slot</span><br />{card.suggestedSlot}</p>}
-      {card.note && <p className="card-text">{card.note}</p>}
-      <p className="mt-4 mb-0 text-sm card-muted">Based on events visible in your calendar. <a className="text-primary underline" href={calendarUrl} target="_blank" rel="noreferrer">Open calendar</a></p>
-    </SurfaceCard>
+      ) : (
+        <p className="mt-3 text-sm text-zinc-300">No events visible on this day.</p>
+      )}
+      {card.suggestedSlot && (
+        <p className="mt-3 rounded-xl border border-violet-400/40 bg-violet-400/10 px-3 py-2 text-sm text-violet-100">
+          Suggested slot: <span className="font-medium">{card.suggestedSlot}</span>
+        </p>
+      )}
+      {card.note && <p className="mt-3 text-sm leading-relaxed text-zinc-300">{card.note}</p>}
+      <p className="mt-4 text-xs text-zinc-400">
+        Based on events visible in your calendar.{' '}
+        <a href={`https://calendar.google.com/calendar/r/day/${year}/${month}/${day}`} target="_blank" rel="noreferrer" className={linkClass}>
+          Open calendar
+        </a>
+      </p>
+    </article>
   );
 }
 
-const fieldClass = 'mt-1 w-full rounded-[14px] border border-outline bg-surface px-3 py-2 text-sm text-on-surface disabled:opacity-60';
+const fieldClass =
+  'mt-1 w-full rounded-lg border border-white/10 bg-black/30 px-3 py-2 text-sm text-zinc-100 disabled:opacity-60';
 
 function Field(props: { label: string; value: string; type?: string; rows?: number; disabled: boolean; onChange(value: string): void }) {
   const { label, rows, onChange, ...rest } = props;
   return (
-    <label className="field">
+    <label className="block text-xs text-zinc-400">
       {label}
       {rows ? (
-        <textarea rows={rows} className={fieldClass} {...rest} onChange={(event) => onChange(event.target.value)} />
+        <textarea rows={rows} className={fieldClass} {...rest} onChange={(e) => onChange(e.target.value)} />
       ) : (
-        <input className={fieldClass} {...rest} onChange={(event) => onChange(event.target.value)} />
+        <input className={fieldClass} {...rest} onChange={(e) => onChange(e.target.value)} />
       )}
     </label>
   );
@@ -131,35 +151,27 @@ function ApprovalCard({ card }: { card: ApprovalCardData }) {
       label={label}
       value={(action as Record<string, string>)[key]}
       disabled={locked}
-      onChange={(value) => setAction((previous) => ({ ...previous, [key]: value }) as Action)}
+      onChange={(value) => setAction((a) => ({ ...a, [key]: value }) as Action)}
       {...extra}
     />
   );
 
   async function onApprove() {
     try {
-      await approve(card.approvalId, action);
+      await approve(card.approvalId, action); // the write URL opens only here
       setState('opened');
       setError('');
-    } catch (reason) {
-      setError(errorMessage(reason));
+    } catch (e) {
+      setError(errorMessage(e));
     }
   }
 
-  const steps = ['Proposed', 'Approved', 'Opened', 'Completed'];
-  const activeStep = state === 'opened' ? 2 : 0;
-
   return (
-    <SurfaceCard className="approval-card">
-      <CardHeader icon="shield" title={action.kind === 'email' ? 'Review email draft' : 'Review calendar event'} status="Approval needed" />
-      <div className="stepper" aria-label={`Approval status: ${state === 'pending' ? 'Proposed' : state === 'opened' ? 'Opened' : 'Cancelled'}`}>
-        {steps.map((step, index) => (
-          <span key={step} className={`stepper-step ${index <= activeStep ? 'done' : ''}`}>
-            {index ? <span aria-hidden="true">→</span> : null}{step}
-          </span>
-        ))}
-      </div>
-      <div className="grid gap-3 sm:grid-cols-2">
+    <article className={`${shell} border-violet-400/50`}>
+      <h3 className="text-lg font-semibold">
+        Approval needed: {action.kind === 'email' ? 'email draft' : 'calendar event'}
+      </h3>
+      <div className="mt-3 grid gap-3 sm:grid-cols-2">
         {action.kind === 'email' ? (
           <>
             {field('To', 'to', { type: 'email' })}
@@ -176,49 +188,82 @@ function ApprovalCard({ card }: { card: ApprovalCardData }) {
           </>
         )}
       </div>
-      {error && <p role="alert" className="mt-3 text-sm text-error">{error}</p>}
+      {error && (
+        <p role="alert" className="mt-3 text-sm text-red-300">
+          {error}
+        </p>
+      )}
       <div className="mt-4 flex flex-wrap items-center gap-3">
         {!locked && (
           <>
-            <Button type="button" onClick={onApprove}>Approve and open in {app}</Button>
-            <Button type="button" variant="text" onClick={() => { dismiss(card.approvalId); setState('dismissed'); }}>Cancel</Button>
+            <button type="button" onClick={onApprove} className="rounded-lg bg-violet-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-violet-500">
+              Approve and open in {app}
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                dismiss(card.approvalId);
+                setState('dismissed');
+              }}
+              className={buttonClass}
+            >
+              Dismiss
+            </button>
           </>
         )}
-        <p role="status" aria-live="polite" className="m-0 text-sm card-muted">
+        <p role="status" aria-live="polite" className="text-sm text-zinc-300">
           {state === 'pending' && `Nothing has been ${action.kind === 'email' ? 'sent' : 'created'}. Edit if needed, then approve.`}
           {state === 'opened' && `Opened in ${app}: review and ${action.kind === 'email' ? 'send' : 'save'}.`}
-          {state === 'dismissed' && 'Cancelled. Nothing was opened.'}
+          {state === 'dismissed' && 'Dismissed. Nothing was opened.'}
         </p>
       </div>
-    </SurfaceCard>
+    </article>
   );
 }
 
-export function CardView({ card, onReply, onRetry }: { card: Card; onReply?(): void; onRetry?(): void }) {
+export function CardView({ card }: { card: Card }) {
   switch (card.type) {
     case 'answer':
       return (
-        <SurfaceCard>
-          <CardHeader icon="sparkle" title={card.title || 'Answer'} />
-          <p className="m-0 whitespace-pre-wrap card-text">{card.text}</p>
+        <article className={shell}>
+          {card.title && <h3 className="mb-2 text-lg font-semibold">{card.title}</h3>}
+          <p className="whitespace-pre-wrap leading-relaxed text-zinc-200">{card.text}</p>
           <Sources urls={card.sources} />
-        </SurfaceCard>
+        </article>
       );
     case 'email':
-      return <EmailCard card={card} onReply={onReply} />;
+      return <EmailCard card={card} />;
     case 'table':
       return (
-        <SurfaceCard>
-          <CardHeader icon="table" title={card.title || 'Comparison'} />
-          <div className="table-wrap" tabIndex={0} role="region" aria-label={card.title || 'Comparison table'}>
-            <table className="data-table">
-              <thead><tr>{card.columns.map((column, index) => <th key={index} scope="col">{column}</th>)}</tr></thead>
-              <tbody>
-                {card.rows.map((row, rowIndex) => (
-                  <tr key={rowIndex}>
-                    {card.columns.map((_, columnIndex) => {
-                      const cell = row[columnIndex] ?? '';
-                      return <td key={columnIndex}>{isHttpUrl(cell) ? <a className="text-primary underline" href={cell} target="_blank" rel="noreferrer">{sourceHostname(cell)}</a> : cell}</td>;
+        <article className={shell}>
+          {card.title && <h3 className="mb-3 text-lg font-semibold">{card.title}</h3>}
+          <div className="overflow-x-auto" tabIndex={0} role="group" aria-label={card.title || 'Table'}>
+            <table className="w-full border-collapse text-left text-sm">
+              <thead>
+                <tr className="border-b border-white/15 text-zinc-400">
+                  {card.columns.map((column, i) => (
+                    <th key={i} scope="col" className="py-2 pr-4 font-medium">
+                      {column}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-white/10">
+                {card.rows.map((row, r) => (
+                  <tr key={r} className="align-top">
+                    {card.columns.map((_, c) => {
+                      const cell = row[c] ?? '';
+                      return (
+                        <td key={c} className={`py-2 pr-4 ${c === 0 ? 'font-medium text-zinc-100' : 'text-zinc-300'}`}>
+                          {isHttpUrl(cell) ? (
+                            <a href={cell} target="_blank" rel="noreferrer" className={linkClass}>
+                              {sourceLabel(cell)}
+                            </a>
+                          ) : (
+                            cell
+                          )}
+                        </td>
+                      );
                     })}
                   </tr>
                 ))}
@@ -226,7 +271,7 @@ export function CardView({ card, onReply, onRetry }: { card: Card; onReply?(): v
             </table>
           </div>
           <Sources urls={card.sources} />
-        </SurfaceCard>
+        </article>
       );
     case 'calendar':
       return <CalendarCard card={card} />;
@@ -234,12 +279,11 @@ export function CardView({ card, onReply, onRetry }: { card: Card; onReply?(): v
       return <ApprovalCard card={card} />;
     case 'error':
       return (
-        <SurfaceCard className="error-card" role="alert">
-          <CardHeader icon="error" title="Something went wrong" status="Error" />
-          <p className="m-0 whitespace-pre-wrap card-text">{card.message}</p>
-          {card.recovery && <p className="mt-2 mb-0 card-muted">{card.recovery}</p>}
-          {onRetry && <Button type="button" className="mt-4" variant="outlined" onClick={onRetry}>Retry</Button>}
-        </SurfaceCard>
+        <article className={`${shell} border-red-400/40`} role="alert">
+          <h3 className="mb-1 font-semibold text-red-300">Something went wrong</h3>
+          <p className="whitespace-pre-wrap text-zinc-200">{card.message}</p>
+          {card.recovery && <p className="mt-2 text-sm text-zinc-400">{card.recovery}</p>}
+        </article>
       );
     default:
       return null;
